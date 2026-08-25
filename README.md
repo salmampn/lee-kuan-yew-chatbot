@@ -6,9 +6,9 @@ A source-grounded educational chatbot that helps users explore leadership, gover
 
 ## Demo
 
-- **Repository:** https://github.com/salmampn/lee-kuan-yew-chatbot
 - **Live demo:** https://lee-kuan-yew-chatbot-dun.vercel.app/
-- **Suggested test prompt:**  
+- **Repository:** https://github.com/salmampn/lee-kuan-yew-chatbot
+- **Suggested test prompt:**
   `Based on the available sources, what principles did Lee Kuan Yew emphasize for building a stable and economically successful nation? Please cite the sources used.`
 
 ## Features
@@ -51,7 +51,7 @@ Client-side document parsing and chunk retrieval
 Top relevant source excerpts
     |
     v
-Express + TypeScript API
+Express API (api/index.ts, deployed as a Vercel Function)
     |
     v
 Google Gemini API with source-grounding instructions
@@ -60,13 +60,17 @@ Google Gemini API with source-grounding instructions
 Answer + sources used + evidence view
 ```
 
+**Note on deployment:** This project has two server entry points. `server.ts` runs a long-lived Express process with Vite middleware for local development (`npm run dev`). In production on Vercel, `api/index.ts` runs as a discrete serverless function instead, since Vercel's platform expects individual API functions rather than a single persistent `app.listen()` process. Routing between the static frontend and the API function is configured in `vercel.json`.
+
 ## Technology Stack
 
 - Frontend: React, TypeScript, Vite
-- Backend: Express, TypeScript
+- Backend (local dev): Express, TypeScript, Vite middleware (`server.ts`)
+- Backend (production): Express handler deployed as a Vercel Function (`api/index.ts`)
 - LLM: Google Gemini API
 - PDF extraction: PDF.js
 - Retrieval: Lightweight keyword-based RAG with phrase matching and concept expansion
+- Deployment: Vercel (Hobby plan)
 - Package manager: Bun / npm-compatible project setup
 
 ## Source Policy
@@ -81,7 +85,7 @@ Each source document should retain:
 - Relevant page or section reference
 
 Example public archive:
-- National Archives of Singapore, Speeches and Press Releases:  
+- National Archives of Singapore, Speeches and Press Releases:
   https://www.nas.gov.sg/archivesonline/speeches/
 
 ## Grounding and Safety Rules
@@ -93,7 +97,8 @@ The backend prompt enforces the following rules:
 - Claims about Lee Kuan Yew must be based only on retrieved source excerpts.
 - If the retrieved context is inadequate, it must return the insufficient-evidence response.
 - For contemporary events or hypothetical questions, the answer must include a `Historical lens` heading and clarify that it is an inference from historical materials, not a real statement by Lee Kuan Yew.
-- Responses are constrained to concise, structured answers.
+- Responses are constrained to concise, structured answers (150-250 words).
+- If the Gemini API key is missing, generation fails, or the model returns an empty response, the backend returns the insufficient-evidence response instead of a generic fallback answer.
 
 ## Run Locally
 
@@ -146,22 +151,30 @@ The backend prompt enforces the following rules:
    http://localhost:3000
    ```
 
+## Deployment
+
+The live demo is deployed on Vercel (Hobby plan, no billing required), linked to this GitHub repository via the Vercel GitHub App.
+
+- `vercel.json` rewrites `/api/*` requests to the serverless function in `api/index.ts` and all other routes to the built frontend (`dist/index.html`).
+- The `GEMINI_API_KEY` environment variable is configured in the Vercel project settings (Production environment).
+- Every push to `main` triggers an automatic redeploy.
+
 ## Evaluation
 
 The following manual tests were designed to check retrieval grounding and safe behavior:
 
 | Test case | Example | Expected behavior |
 |---|---|---|
-| Supported historical question | “What principles did Lee Kuan Yew emphasize for national development?” | Source-grounded answer with displayed sources |
-| Unsupported question | “What was Lee Kuan Yew’s view on a topic absent from the corpus?” | Insufficient-evidence response |
-| Fabricated quote request | “Give an exact quote where he discusses a source not in the corpus.” | No invented quotation |
-| Modern hypothetical | “What would Lee Kuan Yew do about AI education today?” | `Historical lens` heading and explicit inference disclaimer |
+| Supported historical question | "What principles did Lee Kuan Yew emphasize for national development?" | Source-grounded answer with displayed sources |
+| Unsupported question | "What was Lee Kuan Yew's view on a topic absent from the corpus?" | Insufficient-evidence response |
+| Fabricated quote request | "Give an exact quote where he discusses a source not in the corpus." | No invented quotation |
+| Modern hypothetical | "What would Lee Kuan Yew do about AI education today?" | `Historical lens` heading and explicit inference disclaimer |
 | API failure | Missing or invalid Gemini API key | Insufficient-evidence response |
 | No retrieval result | Question has no matching source chunks | Insufficient-evidence response |
 
 ## Limitations
 
-- The initial corpus is limited and does not represent all of Lee Kuan Yew’s views or all historical context.
+- The initial corpus is limited and does not represent all of Lee Kuan Yew's views or all historical context.
 - Retrieval is keyword-based, so it can miss relevant passages that use different vocabulary.
 - The quality of answers depends on document quality, chunking, and retrieval accuracy.
 - The application uses an LLM and may still produce incomplete interpretation despite source-grounding constraints.
@@ -175,4 +188,4 @@ The following manual tests were designed to check retrieval grounding and safe b
 - Move document processing and retrieval to a server-side vector database.
 - Add automated RAG evaluation for retrieval relevance, answer faithfulness, and citation accuracy.
 - Add user feedback collection and source-quality review.
-- Deploy the application publicly with protected environment variables.
+- Unify the local-dev and production server entry points to reduce duplicated logic.
