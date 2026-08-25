@@ -1,0 +1,6 @@
+{
+  "name": "What Would Lee Kuan Yew Do?",
+  "description": "An educational RAG chatbot analyzing leadership, governance, geopolitics, and economics using verified public speeches and source documents by Lee Kuan Yew.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

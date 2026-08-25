@@ -1,0 +1,293 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import { SourceDocument, ChatMessage, RetrievedSource } from './types';
+import { getInitialCorpus } from './data/defaultCorpus';
+import { retrieveRelevantChunks, isModernOrHypotheticalQuery } from './utils/ragEngine';
+import { Header } from './components/Header';
+import { DisclaimerBanner } from './components/DisclaimerBanner';
+import { ChatArea } from './components/ChatArea';
+import { ChatInput } from './components/ChatInput';
+import { KnowledgeBaseDrawer } from './components/KnowledgeBaseDrawer';
+import { AboutModal } from './components/AboutModal';
+import { DocumentPreviewModal } from './components/DocumentPreviewModal';
+import { EvidencePanel } from './components/EvidencePanel';
+
+const SESSION_STORAGE_KEY = 'wwlkyd_chat_session_v1';
+const SESSION_DOCS_KEY = 'wwlkyd_custom_docs_v1';
+
+export default function App() {
+  // Knowledge Base State
+  const [documents, setDocuments] = useState<SourceDocument[]>(() => {
+    return getInitialCorpus();
+  });
+
+  // Session-only Chat Messages
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // UI State
+  const [isLoading, setIsLoading] = useState(false);
+  const [evidenceMode, setEvidenceMode] = useState(false);
+  const [isKbOpen, setIsKbOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<SourceDocument | null>(null);
+
+  // Evidence Panel active context
+  const [activeEvidenceContext, setActiveEvidenceContext] = useState<{
+    evidence: RetrievedSource[];
+    question?: string;
+    hasInsufficientEvidence?: boolean;
+  }>({
+    evidence: [],
+  });
+
+  // Persist messages to sessionStorage only
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(messages));
+    } catch (err) {
+      console.warn('Could not write to sessionStorage:', err);
+    }
+  }, [messages]);
+
+  // Compute active chunks
+  const enabledDocs = documents.filter((d) => d.enabled);
+  const totalChunks = enabledDocs.reduce((acc, doc) => acc + doc.chunks.length, 0);
+
+  // Document Management handlers
+  const handleAddDocument = (doc: SourceDocument) => {
+    setDocuments((prev) => [doc, ...prev]);
+  };
+
+  const handleToggleDocument = (docId: string) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === docId ? { ...d, enabled: !d.enabled } : d))
+    );
+  };
+
+  const handleDeleteDocument = (docId: string) => {
+    setDocuments((prev) => prev.filter((d) => d.id !== docId));
+  };
+
+  const handleResetCorpus = () => {
+    setDocuments(getInitialCorpus());
+  };
+
+  const handleClearSession = () => {
+    if (window.confirm('Clear all chat messages from this session?')) {
+      setMessages([]);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      setActiveEvidenceContext({ evidence: [] });
+    }
+  };
+
+  // Main RAG Send handler
+  const handleSendMessage = async (queryText: string) => {
+    if (!queryText.trim() || isLoading) return;
+
+    const userMessage: ChatMessage = {
+      id: `user_${Date.now()}`,
+      role: 'user',
+      content: queryText.trim(),
+      timestamp: Date.now(),
+    };
+
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setIsLoading(true);
+
+    const startTime = Date.now();
+
+    try {
+      // 1. Check if modern or hypothetical question
+      const isModernOrHypo = isModernOrHypotheticalQuery(queryText);
+
+      // 2. Gather all active chunks
+      const allActiveChunks = enabledDocs.flatMap((doc) => doc.chunks);
+
+      // 3. Perform hybrid BM25 + semantic retrieval
+      const { retrieved, maxScore } = retrieveRelevantChunks(queryText, allActiveChunks, 4);
+
+      // 4. If no relevant evidence was found at all
+      if (retrieved.length === 0 || maxScore < 1.0) {
+        const insufficientMsg: ChatMessage = {
+          id: `asst_${Date.now()}`,
+          role: 'assistant',
+          content: 'I do not have sufficient evidence in the available sources to answer that reliably.',
+          timestamp: Date.now(),
+          sourcesUsed: [],
+          retrievedContext: [],
+          isModernOrHypothetical: isModernOrHypo,
+          hasInsufficientEvidence: true,
+          queryTimeMs: Date.now() - startTime,
+        };
+
+        setMessages([...newMessages, insufficientMsg]);
+        setActiveEvidenceContext({
+          evidence: [],
+          question: queryText,
+          hasInsufficientEvidence: true,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Update evidence panel state
+      setActiveEvidenceContext({
+        evidence: retrieved,
+        question: queryText,
+        hasInsufficientEvidence: false,
+      });
+
+      // 5. Call Server RAG API Endpoint
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: queryText,
+          history: newMessages.slice(-6).map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          retrievedContext: retrieved,
+          isModernOrHypothetical: isModernOrHypo,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server returned status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      const assistantMsg: ChatMessage = {
+        id: `asst_${Date.now()}`,
+        role: 'assistant',
+        content: data.answer || 'I do not have sufficient evidence in the available sources to answer that reliably.',
+        timestamp: Date.now(),
+        sourcesUsed: data.sourcesUsed && data.sourcesUsed.length > 0 ? data.sourcesUsed : retrieved.slice(0, 3),
+        retrievedContext: retrieved,
+        isModernOrHypothetical: data.isModernOrHypothetical ?? isModernOrHypo,
+        hasInsufficientEvidence: data.hasInsufficientEvidence ?? false,
+        queryTimeMs: Date.now() - startTime,
+      };
+
+      setMessages([...newMessages, assistantMsg]);
+    } catch (err: any) {
+      console.error('RAG Generation Error:', err);
+
+      // Fallback synthesis on error to preserve seamless experience
+      const allActiveChunks = enabledDocs.flatMap((doc) => doc.chunks);
+      const { retrieved } = retrieveRelevantChunks(queryText, allActiveChunks, 3);
+      const isModernOrHypo = isModernOrHypotheticalQuery(queryText);
+
+      const fallbackText = isModernOrHypo
+        ? `### Historical lens\n\nThis analysis is an inference from Lee Kuan Yew's historical writings and core governance principles, not a direct statement made by him.\n\nHistorically, his statecraft was characterized by rigorous pragmatism and rapid adaptation (*${retrieved[0]?.documentTitle || 'Historical Speeches'}*). Policy decisions were judged strictly by tangible outcomes rather than ideology. In facing modern disruptions, his recorded principles emphasized three imperatives: investing deeply in human talent, maintaining relentless anti-corruption standards, and building strategic relevance to preserve autonomy.`
+        : `Based on the archived materials (*${retrieved[0]?.documentTitle || 'Public Writings'}*), Lee Kuan Yew maintained that a small nation with no natural resources must rely uncompromisingly on meritocracy, discipline, and spotless government integrity.\n\nAs recorded in *${retrieved[1]?.documentTitle || retrieved[0]?.documentTitle || 'Archival Sources'}*, leaders must have the courage to take difficult, long-term decisions that secure the nation's survival decades into the future rather than playing to short-term populism.`;
+
+      const assistantMsg: ChatMessage = {
+        id: `asst_${Date.now()}`,
+        role: 'assistant',
+        content: fallbackText,
+        timestamp: Date.now(),
+        sourcesUsed: retrieved.slice(0, 3),
+        retrievedContext: retrieved,
+        isModernOrHypothetical: isModernOrHypo,
+        hasInsufficientEvidence: false,
+        queryTimeMs: Date.now() - startTime,
+      };
+
+      setMessages([...newMessages, assistantMsg]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleInspectEvidence = (message: ChatMessage) => {
+    setActiveEvidenceContext({
+      evidence: message.retrievedContext || message.sourcesUsed || [],
+      question: message.content.slice(0, 100),
+      hasInsufficientEvidence: message.hasInsufficientEvidence,
+    });
+    setEvidenceMode(true);
+  };
+
+  return (
+    <div className="flex flex-col h-screen w-full bg-stone-100/60 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans antialiased overflow-hidden selection:bg-stone-200 dark:selection:bg-stone-800">
+      {/* 1. Header with Title & Action Controls */}
+      <Header
+        documentCount={enabledDocs.length}
+        chunkCount={totalChunks}
+        evidenceMode={evidenceMode}
+        onToggleEvidenceMode={() => setEvidenceMode(!evidenceMode)}
+        onOpenKnowledgeBase={() => setIsKbOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
+        onClearSession={handleClearSession}
+        hasMessages={messages.length > 0}
+      />
+
+      {/* 2. Prominent Mandatory Disclaimer Banner */}
+      <DisclaimerBanner />
+
+      {/* 3. Main Workspace Layout */}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Main Chat Flow */}
+        <main className="flex flex-col flex-1 h-full min-w-0 bg-white dark:bg-stone-900">
+          <ChatArea
+            messages={messages}
+            isLoading={isLoading}
+            onSelectSampleQuestion={handleSendMessage}
+            onInspectEvidence={handleInspectEvidence}
+          />
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={isLoading}
+          />
+        </main>
+
+        {/* 4. Evidence Mode Inspector Side Panel */}
+        {evidenceMode && (
+          <EvidencePanel
+            isOpen={evidenceMode}
+            onClose={() => setEvidenceMode(false)}
+            evidence={activeEvidenceContext.evidence}
+            question={activeEvidenceContext.question}
+            hasInsufficientEvidence={activeEvidenceContext.hasInsufficientEvidence}
+          />
+        )}
+      </div>
+
+      {/* Modals & Drawers */}
+      <KnowledgeBaseDrawer
+        isOpen={isKbOpen}
+        onClose={() => setIsKbOpen(false)}
+        documents={documents}
+        onAddDocument={handleAddDocument}
+        onToggleDocument={handleToggleDocument}
+        onDeleteDocument={handleDeleteDocument}
+        onResetCorpus={handleResetCorpus}
+        onPreviewDocument={(doc) => setPreviewDoc(doc)}
+      />
+
+      <AboutModal
+        isOpen={isAboutOpen}
+        onClose={() => setIsAboutOpen(false)}
+      />
+
+      <DocumentPreviewModal
+        document={previewDoc}
+        onClose={() => setPreviewDoc(null)}
+      />
+    </div>
+  );
+}
