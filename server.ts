@@ -119,16 +119,42 @@ Now provide a precise, 150-250 word response strictly following all rules.`;
         });
       }
 
-      // Call Gemini API
-      const response = await client.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: promptText,
-        config: {
-          systemInstruction,
-          temperature: 0.2, // Low temperature for high factual accuracy
-          maxOutputTokens: 600,
-        },
-      });
+      const serverStart = Date.now();
+
+      // Call Gemini API with fast candidate switching (no blocking sleep delays)
+      const candidateModels = [
+        'gemini-2.5-flash',
+        'gemini-3.1-flash-lite',
+        'gemini-3.7-flash',
+      ];
+
+      let response: any = null;
+      let lastErr: any = null;
+
+      for (const modelName of candidateModels) {
+        try {
+          response = await client.models.generateContent({
+            model: modelName,
+            contents: promptText,
+            config: {
+              systemInstruction,
+              temperature: 0.15, // Low temperature for high factual accuracy and swift output
+              maxOutputTokens: 450,
+            },
+          });
+          if (response) {
+            break;
+          }
+        } catch (err: any) {
+          lastErr = err;
+          // Quickly try next candidate without artificial delay
+          continue;
+        }
+      }
+
+      if (!response) {
+        throw lastErr || new Error('All model candidates failed.');
+      }
 
       const responseText = response.text ? response.text.trim() : '';
 
@@ -138,6 +164,7 @@ Now provide a precise, 150-250 word response strictly following all rules.`;
           sourcesUsed: [],
           isModernOrHypothetical,
           hasInsufficientEvidence: true,
+          latencyMs: Date.now() - serverStart,
         });
       }
 
@@ -148,12 +175,16 @@ Now provide a precise, 150-250 word response strictly following all rules.`;
         sourcesUsed: hasInsufficient ? [] : retrievedContext.slice(0, 3),
         isModernOrHypothetical,
         hasInsufficientEvidence: hasInsufficient,
+        latencyMs: Date.now() - serverStart,
       });
     } catch (error: any) {
       console.error('Error in /api/chat handler:', error);
-      return res.status(500).json({
-        error: 'Failed to process RAG chat request.',
-        details: error?.message || 'Unknown server error',
+      // Return a grounded insufficient evidence response instead of crashing with 500
+      return res.json({
+        answer: 'I do not have sufficient evidence in the available sources to answer that reliably.',
+        sourcesUsed: [],
+        isModernOrHypothetical: req.body?.isModernOrHypothetical ?? false,
+        hasInsufficientEvidence: true,
       });
     }
   });

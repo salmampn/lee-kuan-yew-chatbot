@@ -77,12 +77,22 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-stone-400 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity">
-              <span>{wordCount} words</span>
+            <div className="flex items-center gap-2 text-stone-400 text-[11px] transition-opacity">
+              {!isUser && message.queryTimeMs !== undefined && message.queryTimeMs > 0 && (
+                <span className="flex items-center gap-1 text-stone-500 dark:text-stone-400 font-mono text-[10px] bg-stone-100 dark:bg-stone-800/80 px-1.5 py-0.5 rounded border border-stone-200 dark:border-stone-700/60" title={`Synthesized in ${(message.queryTimeMs / 1000).toFixed(2)} seconds`}>
+                  <Clock className="w-3 h-3" />
+                  <span>
+                    {message.queryTimeMs >= 60000
+                      ? `${Math.floor(message.queryTimeMs / 60000)}m ${((message.queryTimeMs % 60000) / 1000).toFixed(1)}s`
+                      : `${(message.queryTimeMs / 1000).toFixed(1)}s`}
+                  </span>
+                </span>
+              )}
+              <span className="opacity-0 group-hover:opacity-100 transition-opacity">{wordCount} words</span>
               <button
                 id={`copy-msg-btn-${message.id}`}
                 onClick={handleCopy}
-                className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors cursor-pointer"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-800 text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 transition-colors cursor-pointer"
                 title="Copy message text"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}

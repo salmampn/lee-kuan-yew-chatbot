@@ -1,15 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Sparkles, Loader2, Square } from 'lucide-react';
 
 interface ChatInputProps {
   onSendMessage: (text: string) => void;
   isLoading: boolean;
+  onStop?: () => void;
   disabled?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSendMessage,
   isLoading,
+  onStop,
   disabled = false,
 }) => {
   const [input, setInput] = useState('');
@@ -24,7 +26,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || disabled) return;
+    if (isLoading) {
+      if (onStop) onStop();
+      return;
+    }
+    if (!input.trim() || disabled) return;
     onSendMessage(input.trim());
     setInput('');
     if (textareaRef.current) {
@@ -54,30 +60,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              disabled={isLoading || disabled}
+              disabled={disabled}
               placeholder="Ask about governance, leadership, geopolitics, economic strategy, or life principles..."
               className="w-full resize-none bg-transparent px-4 py-3 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none max-h-44 leading-relaxed"
             />
           </div>
 
-          <button
-            id="send-chat-button"
-            type="submit"
-            disabled={!input.trim() || isLoading || disabled}
-            aria-label="Send message"
-            className="p-3 rounded-xl bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs shrink-0 flex items-center justify-center cursor-pointer"
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
+          {isLoading ? (
+            <button
+              id="stop-chat-button"
+              type="button"
+              onClick={onStop}
+              aria-label="Stop generation"
+              className="p-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-xs shrink-0 flex items-center justify-center cursor-pointer"
+              title="Stop generating"
+            >
+              <Square className="w-5 h-5 fill-current" />
+            </button>
+          ) : (
+            <button
+              id="send-chat-button"
+              type="submit"
+              disabled={!input.trim() || disabled}
+              aria-label="Send message"
+              className="p-3 rounded-xl bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-xs shrink-0 flex items-center justify-center cursor-pointer"
+            >
               <Send className="w-5 h-5" />
-            )}
-          </button>
+            </button>
+          )}
         </form>
 
         <div className="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400 mt-2 px-1">
           <span>Grounded retrieval from verified Lee Kuan Yew public documents</span>
-          <span className="hidden sm:inline">Press Enter to send &bull; Shift+Enter for newline</span>
+          <span className="hidden sm:inline">
+            {isLoading ? 'Click Stop to cancel answer' : 'Press Enter to send \u2022 Shift+Enter for newline'}
+          </span>
         </div>
       </div>
     </div>

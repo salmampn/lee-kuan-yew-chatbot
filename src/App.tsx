@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SourceDocument, ChatMessage, RetrievedSource } from './types';
 import { getInitialCorpus } from './data/defaultCorpus';
 import { retrieveRelevantChunks, isModernOrHypotheticalQuery } from './utils/ragEngine';
@@ -15,6 +15,7 @@ import { KnowledgeBaseDrawer } from './components/KnowledgeBaseDrawer';
 import { AboutModal } from './components/AboutModal';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { EvidencePanel } from './components/EvidencePanel';
+import { ClearHistoryModal } from './components/ClearHistoryModal';
 
 const SESSION_STORAGE_KEY = 'wwlkyd_chat_session_v1';
 const SESSION_DOCS_KEY = 'wwlkyd_custom_docs_v1';
@@ -40,7 +41,9 @@ export default function App() {
   const [evidenceMode, setEvidenceMode] = useState(false);
   const [isKbOpen, setIsKbOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<SourceDocument | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Evidence Panel active context
   const [activeEvidenceContext, setActiveEvidenceContext] = useState<{
@@ -84,11 +87,26 @@ export default function App() {
   };
 
   const handleClearSession = () => {
-    if (window.confirm('Clear all chat messages from this session?')) {
-      setMessages([]);
+    setIsClearModalOpen(true);
+  };
+
+  const handleConfirmClear = () => {
+    setMessages([]);
+    try {
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
-      setActiveEvidenceContext({ evidence: [] });
+    } catch (e) {
+      console.warn('Could not clear sessionStorage:', e);
     }
+    setActiveEvidenceContext({ evidence: [] });
+  };
+
+  // Stop in-flight generation
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
   };
 
   // Main RAG Send handler
@@ -107,6 +125,8 @@ export default function App() {
     setIsLoading(true);
 
     const startTime = Date.now();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       // 1. Check if modern or hypothetical question
@@ -153,6 +173,7 @@ export default function App() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortController.signal,
         body: JSON.stringify({
           question: queryText,
           history: newMessages.slice(-6).map((m) => ({
@@ -184,6 +205,10 @@ export default function App() {
 
       setMessages([...newMessages, assistantMsg]);
     } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        console.log('User cancelled answer generation.');
+        return;
+      }
       console.error('RAG Generation Error:', err);
 
       const insufficientMsg: ChatMessage = {
@@ -206,7 +231,11 @@ export default function App() {
         question: queryText,
         hasInsufficientEvidence: true,
       });
+    } finally {
+      setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  };
 
   const handleInspectEvidence = (message: ChatMessage) => {
     setActiveEvidenceContext({
@@ -243,10 +272,12 @@ export default function App() {
             isLoading={isLoading}
             onSelectSampleQuestion={handleSendMessage}
             onInspectEvidence={handleInspectEvidence}
+            onStopGeneration={handleStopGeneration}
           />
           <ChatInput
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
+            onStop={handleStopGeneration}
           />
         </main>
 
@@ -282,6 +313,13 @@ export default function App() {
       <DocumentPreviewModal
         document={previewDoc}
         onClose={() => setPreviewDoc(null)}
+      />
+
+      <ClearHistoryModal
+        isOpen={isClearModalOpen}
+        onClose={() => setIsClearModalOpen(false)}
+        onConfirm={handleConfirmClear}
+        messageCount={messages.length}
       />
     </div>
   );

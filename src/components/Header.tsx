@@ -100,11 +100,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               id="clear-session-btn"
               onClick={onClearSession}
-              className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 bg-stone-100/80 dark:bg-stone-800/80 hover:bg-stone-200/70 dark:hover:bg-stone-700/70 border border-stone-200 dark:border-stone-700 transition-colors flex items-center gap-1.5 cursor-pointer"
               title="Clear current session chat history"
               aria-label="Clear session"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Clear Chat</span>
             </button>
           )}
         </div>
