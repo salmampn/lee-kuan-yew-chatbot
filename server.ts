@@ -19,7 +19,7 @@ function getAIClient(): GoogleGenAI | null {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json({ limit: '20mb' }));
 
@@ -205,7 +205,7 @@ Now provide a precise, 150-250 word response strictly following all rules.`;
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`What Would Lee Kuan Yew Do? server running at http://0.0.0.0:${PORT}`);
+    console.log(`What Would Lee Kuan Yew Do? server running on port ${PORT}`);
   });
 }
 
