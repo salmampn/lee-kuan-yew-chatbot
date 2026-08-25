@@ -7,7 +7,7 @@ A source-grounded educational chatbot that helps users explore leadership, gover
 ## Demo
 
 - **Repository:** https://github.com/salmampn/lee-kuan-yew-chatbot
-- **Live demo:** Add your Google AI Studio / deployed app link here, if available.
+- **Live demo:** https://lee-kuan-yew-chatbot-dun.vercel.app/
 - **Suggested test prompt:**  
   `Based on the available sources, what principles did Lee Kuan Yew emphasize for building a stable and economically successful nation? Please cite the sources used.`
 
