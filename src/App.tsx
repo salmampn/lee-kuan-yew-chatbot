@@ -186,32 +186,27 @@ export default function App() {
     } catch (err: any) {
       console.error('RAG Generation Error:', err);
 
-      // Fallback synthesis on error to preserve seamless experience
-      const allActiveChunks = enabledDocs.flatMap((doc) => doc.chunks);
-      const { retrieved } = retrieveRelevantChunks(queryText, allActiveChunks, 3);
-      const isModernOrHypo = isModernOrHypotheticalQuery(queryText);
-
-      const fallbackText = isModernOrHypo
-        ? `### Historical lens\n\nThis analysis is an inference from Lee Kuan Yew's historical writings and core governance principles, not a direct statement made by him.\n\nHistorically, his statecraft was characterized by rigorous pragmatism and rapid adaptation (*${retrieved[0]?.documentTitle || 'Historical Speeches'}*). Policy decisions were judged strictly by tangible outcomes rather than ideology. In facing modern disruptions, his recorded principles emphasized three imperatives: investing deeply in human talent, maintaining relentless anti-corruption standards, and building strategic relevance to preserve autonomy.`
-        : `Based on the archived materials (*${retrieved[0]?.documentTitle || 'Public Writings'}*), Lee Kuan Yew maintained that a small nation with no natural resources must rely uncompromisingly on meritocracy, discipline, and spotless government integrity.\n\nAs recorded in *${retrieved[1]?.documentTitle || retrieved[0]?.documentTitle || 'Archival Sources'}*, leaders must have the courage to take difficult, long-term decisions that secure the nation's survival decades into the future rather than playing to short-term populism.`;
-
-      const assistantMsg: ChatMessage = {
+      const insufficientMsg: ChatMessage = {
         id: `asst_${Date.now()}`,
         role: 'assistant',
-        content: fallbackText,
+        content:
+          'I do not have sufficient evidence in the available sources to answer that reliably.',
         timestamp: Date.now(),
-        sourcesUsed: retrieved.slice(0, 3),
-        retrievedContext: retrieved,
-        isModernOrHypothetical: isModernOrHypo,
-        hasInsufficientEvidence: false,
+        sourcesUsed: [],
+        retrievedContext: [],
+        isModernOrHypothetical: isModernOrHypotheticalQuery(queryText),
+        hasInsufficientEvidence: true,
         queryTimeMs: Date.now() - startTime,
       };
 
-      setMessages([...newMessages, assistantMsg]);
-    } finally {
-      setIsLoading(false);
+      setMessages([...newMessages, insufficientMsg]);
+
+      setActiveEvidenceContext({
+        evidence: [],
+        question: queryText,
+        hasInsufficientEvidence: true,
+      });
     }
-  };
 
   const handleInspectEvidence = (message: ChatMessage) => {
     setActiveEvidenceContext({

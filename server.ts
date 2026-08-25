@@ -63,8 +63,7 @@ async function startServer() {
         return `--- [SOURCE ${index + 1}] ---
 Document: ${c.documentName} ("${c.documentTitle}")
 Section/Reference: ${c.pageOrSection || 'General'}
-Excerpt:
-${c.fullText || c.excerpt}
+Excerpt: ${c.excerpt}
 `;
       }).join('\n\n');
 
@@ -98,15 +97,25 @@ ${history.slice(-3).map((h: any) => `${h.role.toUpperCase()}: ${h.content}`).joi
 
 Now provide a precise, 150-250 word response strictly following all rules.`;
 
+      // if (!client) {
+      //   // Fallback generator when API key is not configured or in offline sandbox mode
+      //   // Synthesizes grounded answer directly from the retrieved context
+      //   const synthesized = generateFallbackRAGAnswer(question, retrievedContext, isModernOrHypothetical);
+      //   return res.json({
+      //     answer: synthesized.answer,
+      //     sourcesUsed: retrievedContext.slice(0, 3),
+      //     isModernOrHypothetical,
+      //     hasInsufficientEvidence: synthesized.hasInsufficientEvidence,
+      //   });
+      // }
+
       if (!client) {
-        // Fallback generator when API key is not configured or in offline sandbox mode
-        // Synthesizes grounded answer directly from the retrieved context
-        const synthesized = generateFallbackRAGAnswer(question, retrievedContext, isModernOrHypothetical);
         return res.json({
-          answer: synthesized.answer,
-          sourcesUsed: retrievedContext.slice(0, 3),
+          answer:
+            'I do not have sufficient evidence in the available sources to answer that reliably.',
+          sourcesUsed: [],
           isModernOrHypothetical,
-          hasInsufficientEvidence: synthesized.hasInsufficientEvidence,
+          hasInsufficientEvidence: true,
         });
       }
 
@@ -169,32 +178,32 @@ Now provide a precise, 150-250 word response strictly following all rules.`;
   });
 }
 
-function generateFallbackRAGAnswer(
-  question: string,
-  sources: any[],
-  isModern: boolean
-): { answer: string; hasInsufficientEvidence: boolean } {
-  if (!sources || sources.length === 0) {
-    return {
-      answer: 'I do not have sufficient evidence in the available sources to answer that reliably.',
-      hasInsufficientEvidence: true,
-    };
-  }
+// function generateFallbackRAGAnswer(
+//   question: string,
+//   sources: any[],
+//   isModern: boolean
+// ): { answer: string; hasInsufficientEvidence: boolean } {
+//   if (!sources || sources.length === 0) {
+//     return {
+//       answer: 'I do not have sufficient evidence in the available sources to answer that reliably.',
+//       hasInsufficientEvidence: true,
+//     };
+//   }
 
-  const primary = sources[0];
-  const secondary = sources[1] || primary;
+//   const primary = sources[0];
+//   const secondary = sources[1] || primary;
 
-  let body = '';
-  if (isModern) {
-    body = `### Historical lens\n\nThis analysis is an inference from Lee Kuan Yew's historical writings and core governance principles, not a direct statement made by him regarding modern circumstances.\n\nHistorically, his approach to structural disruption and statecraft was defined by ruthless pragmatism and adaptability (*${primary.documentTitle}*). Rather than adhering to dogmatic doctrines, policy was evaluated solely by measurable outcomes: does it strengthen national resilience, preserve institutional integrity, and create sustainable livelihoods?\n\nIn addressing modern dilemmas, his historical framework emphasized three non-negotiables: investing aggressively in talent and technical capabilities, preserving uncompromising standards against corruption, and maintaining strategic autonomy through international relevance. As documented in *${secondary.documentName}*, small states survive not through moralizing, but by anticipating global shifts faster than their competitors.`;
-  } else {
-    body = `Based on the archived source materials, Lee Kuan Yew's position was rooted in empirical pragmatism and institutional discipline.\n\nIn *${primary.documentTitle}* (${primary.pageOrSection || 'Source Reference'}), he emphasized that a small nation without natural resources possesses only one enduring asset: the intelligence, discipline, and integrity of its people. Meritocracy and absolute zero-tolerance for corruption were treated not as philosophical ideals, but as existential survival mechanisms.\n\nFurthermore, as highlighted in *${secondary.documentName}*, long-term national viability requires leaders who are prepared to make difficult, unpopular decisions today to guarantee stability and security decades ahead. Public trust is earned through competence and concrete execution rather than populist rhetoric.`;
-  }
+//   let body = '';
+//   if (isModern) {
+//     body = `### Historical lens\n\nThis analysis is an inference from Lee Kuan Yew's historical writings and core governance principles, not a direct statement made by him regarding modern circumstances.\n\nHistorically, his approach to structural disruption and statecraft was defined by ruthless pragmatism and adaptability (*${primary.documentTitle}*). Rather than adhering to dogmatic doctrines, policy was evaluated solely by measurable outcomes: does it strengthen national resilience, preserve institutional integrity, and create sustainable livelihoods?\n\nIn addressing modern dilemmas, his historical framework emphasized three non-negotiables: investing aggressively in talent and technical capabilities, preserving uncompromising standards against corruption, and maintaining strategic autonomy through international relevance. As documented in *${secondary.documentName}*, small states survive not through moralizing, but by anticipating global shifts faster than their competitors.`;
+//   } else {
+//     body = `Based on the archived source materials, Lee Kuan Yew's position was rooted in empirical pragmatism and institutional discipline.\n\nIn *${primary.documentTitle}* (${primary.pageOrSection || 'Source Reference'}), he emphasized that a small nation without natural resources possesses only one enduring asset: the intelligence, discipline, and integrity of its people. Meritocracy and absolute zero-tolerance for corruption were treated not as philosophical ideals, but as existential survival mechanisms.\n\nFurthermore, as highlighted in *${secondary.documentName}*, long-term national viability requires leaders who are prepared to make difficult, unpopular decisions today to guarantee stability and security decades ahead. Public trust is earned through competence and concrete execution rather than populist rhetoric.`;
+//   }
 
-  return {
-    answer: body,
-    hasInsufficientEvidence: false,
-  };
-}
+//   return {
+//     answer: body,
+//     hasInsufficientEvidence: false,
+//   };
+// }
 
 startServer();
